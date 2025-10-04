@@ -119,11 +119,36 @@ export async function GET() {
   const s = await readSession()
   if (!s) return Response.json({ error: "Unauthorized" }, { status: 401 })
   const db = getDb()
-  const [items] = await db.query<any>(
-    `
-    SELECT e.* FROM expenses e WHERE e.company_id = ? ORDER BY e.created_at DESC
-  `,
-    [s.cid],
-  )
+  let items: any[] = []
+  if (s.role === "ADMIN") {
+    const [rows] = await db.query<any>(
+      `
+      SELECT e.* FROM expenses e WHERE e.company_id = ? ORDER BY e.created_at DESC
+    `,
+      [s.cid],
+    )
+    items = rows as any[]
+  } else if (s.role === "MANAGER") {
+    const [rows] = await db.query<any>(
+      `
+      SELECT e.*
+      FROM expenses e
+      JOIN users u ON u.id = e.employee_id
+      WHERE e.company_id = ? AND u.manager_id = ?
+      ORDER BY e.created_at DESC
+    `,
+      [s.cid, s.sub],
+    )
+    items = rows as any[]
+  } else {
+    // EMPLOYEE: only own expenses
+    const [rows] = await db.query<any>(
+      `
+      SELECT e.* FROM expenses e WHERE e.company_id = ? AND e.employee_id = ? ORDER BY e.created_at DESC
+    `,
+      [s.cid, s.sub],
+    )
+    items = rows as any[]
+  }
   return Response.json({ items })
 }
